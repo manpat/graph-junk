@@ -75,21 +75,22 @@ impl ViewModel {
 	fn scale_factor(&self) -> f32 { 2.0f32.powf(self.camera_zoom) }
 
 	pub fn pan_camera(&mut self, screen_delta: Vec2) {
-		let world_delta = 0.5 * screen_delta * self.scale_factor();
+		// TODO(pat.m): why is it 2.0
+		let world_delta = -2.0 * screen_delta * self.scale_factor();
 		self.camera_pos += world_delta;
 	}
 
 	pub fn zoom_camera(&mut self, ticks: i32) {
-		self.camera_zoom -= ticks as f32 / 5.0;
+		self.camera_zoom -= ticks as f32 / 3.0;
 	}
 
-	pub fn view_matrix(&self) -> Mat4 {
-		let scale = Vec2::splat(1.0 / self.scale_factor()).extend(1.0);
-		Mat4::scale(scale)
-			* Mat4::translate(-self.camera_pos.extend(0.0))
+	pub fn view_matrix(&self) -> Mat2x3 {
+		let scale = Vec2::splat(1.0 / self.scale_factor());
+		Mat2x3::scale(scale)
+			* Mat2x3::translate(-self.camera_pos)
 	}
 
-	pub fn inverse_view_matrix(&self) -> Mat4 {
+	pub fn inverse_view_matrix(&self) -> Mat2x3 {
 		self.view_matrix().inverse()
 	}
 }

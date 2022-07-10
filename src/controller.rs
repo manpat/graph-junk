@@ -1,19 +1,22 @@
 use toybox::prelude::*;
 use crate::view_model::ViewModel;
 use crate::model::Model;
+use input::raw::{Scancode, MouseButton};
 
 toybox::declare_input_context! {
 	struct Actions "" {
-		trigger quit { "Quit" [input::raw::Scancode::Escape] }
+		trigger quit { "Quit" [Scancode::Escape] }
 
-		trigger reset_view { "Reset View" [input::raw::Scancode::Space] }
-		trigger create_node { "Create Node" [input::raw::Scancode::C] }
-		trigger delete_node { "Delete Node" [input::raw::MouseButton::Right] }
+		trigger reset_view { "Reset View" [Scancode::Space] }
+		trigger create_node { "Create Node" [Scancode::C] }
+		trigger delete_node { "Delete Node" [MouseButton::Right] }
 
-		trigger zoom_in { "Zoom In" [input::raw::Scancode::KpPlus] }
-		trigger zoom_out { "Zoom Out" [input::raw::Scancode::KpMinus] }
+		trigger select_node { "Select Node" [MouseButton::Left] }
 
-		state pan { "Pan Camera" [input::raw::MouseButton::Middle] }
+		trigger zoom_in { "Zoom In" [Scancode::KpPlus] }
+		trigger zoom_out { "Zoom Out" [Scancode::KpMinus] }
+
+		state pan { "Pan Camera" [MouseButton::Left] }
 
 		pointer mouse { "Mouse" }
 	}
@@ -56,8 +59,7 @@ impl Controller {
 			if let Some(mouse_pos_view) = input_frame.mouse(self.actions.mouse) {
 				let view_to_world = view_model.inverse_view_matrix();
 
-				// TODO(pat.m): this sucks
-				let mouse_pos_world = (view_to_world * mouse_pos_view.extend(0.0).extend(1.0)).to_vec3().to_xy();
+				let mouse_pos_world = view_to_world * mouse_pos_view;
 
 				let new_node = model.graph.add_node(crate::model::Node{ color: Color::rgb(1.0, 0.0, 1.0) });
 
@@ -71,8 +73,7 @@ impl Controller {
 			if let Some(mouse_pos_view) = input_frame.mouse(self.actions.mouse) {
 				let view_to_world = view_model.inverse_view_matrix();
 
-				// TODO(pat.m): this sucks
-				let mouse_pos_world = (view_to_world * mouse_pos_view.extend(0.0).extend(1.0)).to_vec3().to_xy();
+				let mouse_pos_world = view_to_world * mouse_pos_view;
 
 				let maybe_rect = view_model.node_rects()
 					.find(|(_, aabb)| aabb.contains_point(mouse_pos_world));
@@ -93,7 +94,8 @@ impl Controller {
 			view_model.zoom_camera(-1);
 		}
 
-		// TODO(pat.m): this sucks
+		// TODO(pat.m): this sucks - having to juggle contexts to implement dragging is annoying.
+		// there needs to be another simpler way
 		let pan_started = input_frame.entered(self.actions.pan);
 		let pan_ended = input_frame.left(self.actions.pan);
 
@@ -108,7 +110,12 @@ impl Controller {
 		let input_frame = engine.input.frame_state();
 
 		if let Some(mouse_delta) = input_frame.mouse(self.mouse_actions.mouse) {
-			view_model.pan_camera(-mouse_delta);
+			let drawable_size = engine.gfx.backbuffer_size().to_vec2();
+			// TODO(pat.m): this sucks - it should be possible to reconstruct the absolute pixel delta
+			// from the input system without access to magic constants
+			let mouse_delta_screen = (mouse_delta * 100.0) / drawable_size.y;
+
+			view_model.pan_camera(mouse_delta_screen);
 		}
 	}
 }

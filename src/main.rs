@@ -55,8 +55,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 		}
 
 		let view_matrix = view_model.view_matrix();
-		let projection_view = Mat4::scale(Vec3::new(1.0 / engine.gfx.aspect(), 1.0, 1.0))
-			* view_matrix;
+		let projection_view = Mat4::ortho_aspect(1.0, engine.gfx.aspect(), -1.0, 1.0)
+			* view_matrix.to_mat4_xyw();
 		uniform_buffer.upload_single(&projection_view);
 
 		let mut gfx = engine.gfx.render_state();
