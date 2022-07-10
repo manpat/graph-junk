@@ -11,7 +11,7 @@ toybox::declare_input_context! {
 		trigger create_node { "Create Node" [Scancode::C] }
 		trigger delete_node { "Delete Node" [MouseButton::Right] }
 
-		trigger select_node { "Select Node" [MouseButton::Left] }
+		trigger focus_node { "Focus Node" [Scancode::F] }
 
 		trigger zoom_in { "Zoom In" [Scancode::KpPlus] }
 		trigger zoom_out { "Zoom Out" [Scancode::KpMinus] }
@@ -55,34 +55,40 @@ impl Controller {
 			view_model.reset(model);
 		}
 
+		let view_to_world = view_model.inverse_view_matrix();
+		let world_space_mouse = input_frame.mouse(self.actions.mouse)
+			.map(|view_space| view_to_world * view_space);
+
+		let hovered_node = world_space_mouse
+			.and_then(|mouse_pos| {
+				view_model.node_rects()
+					.find(|(_, aabb)| aabb.contains_point(mouse_pos))
+					.map(|(index, _)| index)
+				});
+
+		view_model.set_hovered_node(hovered_node);
+
 		if input_frame.active(self.actions.create_node) {
-			if let Some(mouse_pos_view) = input_frame.mouse(self.actions.mouse) {
-				let view_to_world = view_model.inverse_view_matrix();
-
-				let mouse_pos_world = view_to_world * mouse_pos_view;
-
+			if let Some(mouse_pos) = world_space_mouse {
 				let new_node = model.graph.add_node(crate::model::Node{ color: Color::rgb(1.0, 0.0, 1.0) });
 
 				let mut projection = crate::view_model::GraphProjection::from_graph(&model.graph);
-				projection.update_position(new_node, |_| mouse_pos_world);
+				projection.update_position(new_node, |_| mouse_pos);
 				view_model.set_projection(projection);
 			}
 		}
 
 		if input_frame.active(self.actions.delete_node) {
-			if let Some(mouse_pos_view) = input_frame.mouse(self.actions.mouse) {
-				let view_to_world = view_model.inverse_view_matrix();
+			if let Some(node_index) = hovered_node {
+				model.graph.remove_node(node_index);
+				view_model.set_projection(crate::view_model::GraphProjection::from_graph(&model.graph));
+			}
+		}
 
-				let mouse_pos_world = view_to_world * mouse_pos_view;
-
-				let maybe_rect = view_model.node_rects()
-					.find(|(_, aabb)| aabb.contains_point(mouse_pos_world));
-
-				if let Some((index, _)) = maybe_rect {
-					dbg!(index);
-					model.graph.remove_node(index);
-					view_model.set_projection(crate::view_model::GraphProjection::from_graph(&model.graph));
-				}
+		if input_frame.active(self.actions.focus_node) {
+			if let Some(node_index) = hovered_node {
+				let projection = crate::view_model::GraphProjection::from_subgraph(&model.graph, node_index, 1);
+				view_model.set_projection(projection);
 			}
 		}
 

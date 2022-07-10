@@ -33,6 +33,11 @@ fn main() -> Result<(), Box<dyn Error>> {
 	let mut line_builder = view_model::LineBuilder2D::new();
 
 
+	unsafe {
+		gfx::raw::DepthFunc(gfx::raw::LEQUAL);
+	}
+
+
 	'main: loop {
 		engine.process_events();
 
@@ -46,7 +51,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 			view_model.update(&model);
 
 			node_mesh_data.clear();
-			view_model::build_nodes(&mut node_mesh_data, view_model.projection(), &model);
+			view_model::build_nodes(&mut node_mesh_data, &view_model, &model);
 			node_mesh.upload(&node_mesh_data);
 			
 			line_builder.clear();

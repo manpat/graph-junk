@@ -20,11 +20,13 @@ const NEIGHBOR_COHESION_DISTANCE: f32 = 0.6;
 const CENTER_OF_MASS_CORRECTIVE_FACTOR: f32 = 1.0;
 
 const NODE_SIZE: f32 = 0.25;
+const NODE_BORDER_FACTOR: f32 = 1.1;
 
 
 
 pub struct ViewModel {
 	projection: GraphProjection,
+	hovered_node: Option<NodeIndex>,
 
 	camera_pos: Vec2,
 	camera_zoom: f32,
@@ -40,6 +42,8 @@ impl ViewModel {
 
 		ViewModel {
 			projection,
+			hovered_node: None,
+
 			camera_pos: Vec2::zero(),
 			camera_zoom: 0.0,
 		}
@@ -58,10 +62,20 @@ impl ViewModel {
 	pub fn set_projection(&mut self, mut projection: GraphProjection) {
 		projection.copy_projections_from(&self.projection);
 		self.projection = projection;
+
+		if let Some(node_index) = self.hovered_node {
+			if !self.projection.contains(node_index) {
+				self.hovered_node = None;
+			}
+		}
 	}
 
 	pub fn projection(&self) -> &GraphProjection {
 		&self.projection
+	}
+
+	pub fn set_hovered_node(&mut self, new_hovered: Option<NodeIndex>) {
+		self.hovered_node = new_hovered;
 	}
 
 	pub fn node_rects(&self) -> impl Iterator<Item=(NodeIndex, Aabb2)> + '_ {
@@ -97,10 +111,18 @@ impl ViewModel {
 
 
 
-pub fn build_nodes(mesh_data: &mut gfx::mesh::MeshData<gfx::vertex::ColorVertex2D>, graph_projection: &GraphProjection, model: &Model) {
+pub fn build_nodes(mesh_data: &mut gfx::mesh::MeshData<gfx::vertex::ColorVertex2D>, view_model: &ViewModel, model: &Model) {
 	use gfx::mesh::*;
 
 	let mut mb = ColorMeshBuilder::new(mesh_data);
+
+	let graph_projection = view_model.projection();
+	if let Some(node_index) = view_model.hovered_node {
+		if let Some(position) = graph_projection.position(node_index) {
+			mb.set_color(Color::rgb(1.0, 0.2, 0.2));
+			mb.build(node_geom_border(position));
+		}
+	}
 
 	for (index, projection) in graph_projection.iter() {
 		let node = &model.graph[index];
@@ -134,8 +156,17 @@ pub fn build_lines(line_builder: &mut LineBuilder2D, graph_projection: &GraphPro
 	}
 }
 
+
 fn node_geom(pos: Vec2) -> gfx::mesh::geom::Quad {
 	let txform = Mat2x3::scale_translate(Vec2::splat(NODE_SIZE), pos);
+	gfx::mesh::geom::Quad::from_matrix(txform)
+}
+
+
+fn node_geom_border(pos: Vec2) -> gfx::mesh::geom::Quad {
+	let border_quad_size = NODE_SIZE * NODE_BORDER_FACTOR;
+
+	let txform = Mat2x3::scale_translate(Vec2::splat(border_quad_size), pos);
 	gfx::mesh::geom::Quad::from_matrix(txform)
 }
 
@@ -213,6 +244,23 @@ impl GraphProjection {
 				.map(|index| (index, NodeProjection { pos: Vec2::zero() }))
 				.collect()
 		}
+	}
+
+	pub fn from_subgraph(graph: &crate::model::Graph, focus: NodeIndex, _depth: u32) -> GraphProjection {
+		const DEFAULT_NODE_PROJECTION: NodeProjection = NodeProjection { pos: Vec2::zero() };
+
+		let mut map = HashMap::new();
+		map.insert(focus, DEFAULT_NODE_PROJECTION);
+
+		for neighbor in graph.neighbors_undirected(focus) {
+			map.insert(neighbor, DEFAULT_NODE_PROJECTION);
+		}
+
+		GraphProjection { map }
+	}
+
+	pub fn contains(&self, index: NodeIndex) -> bool {
+		self.map.contains_key(&index)
 	}
 
 	pub fn copy_projections_from(&mut self, other: &GraphProjection) {
